@@ -1,603 +1,1 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>信念結晶封存匣 - 給 2126 年的我</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Three.js (3D 渲染引擎) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
-
-    <!-- Firebase JS SDK (v9/v10 模組化 CDN) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        
-        window.FirebaseSDK = {
-            initializeApp,
-            getFirestore,
-            collection,
-            addDoc,
-            getDocs,
-            onSnapshot,
-            query,
-            orderBy
-        };
-    </script>
-
-    <style>
-        body {
-            font-family: 'Zen Maru Gothic', sans-serif;
-            background-color: #f7f6f0;
-            color: #2c3531;
-        }
-        .font-serif-tc {
-            font-family: 'Noto Serif TC', serif;
-        }
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.75);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.4);
-        }
-        .crystal-glow {
-            box-shadow: 0 0 25px rgba(180, 210, 200, 0.5);
-        }
-        /* Canvas 觸控互動保護 */
-        canvas {
-            touch-action: none;
-        }
-    </style>
-</head>
-<body class="min-h-screen flex flex-col justify-between selection:bg-emerald-200">
-
-    <!-- 頂部導覽列 -->
-    <header class="sticky top-0 z-40 glass-panel border-b border-stone-200/60 px-4 py-3 sm:px-8">
-        <div class="max-w-6xl mx-auto flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <div class="p-2 bg-emerald-800 text-amber-100 rounded-xl shadow-md">
-                    <i data-lucide="gem" class="w-6 h-6"></i>
-                </div>
-                <div>
-                    <h1 class="font-serif-tc font-bold text-lg sm:text-xl tracking-wide text-stone-800">信念結晶封存匣</h1>
-                    <p class="text-xs text-stone-500">給 2126 年的我___宣言</p>
-                </div>
-            </div>
-
-            <!-- 狀態與金鑰按鈕 -->
-            <div class="flex items-center space-x-2 sm:space-x-4">
-                <button id="cloudStatusBtn" onclick="openConfigModal()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all bg-emerald-100 text-emerald-800 hover:bg-emerald-200">
-                    <span id="statusDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span id="statusText">🟢 雲端同步中</span>
-                </button>
-            </div>
-        </div>
-    </header>
-
-    <!-- 主要內容區 -->
-    <main class="max-w-6xl mx-auto px-4 py-6 w-full flex-grow">
-        <!-- 頁籤導覽 -->
-        <div class="flex justify-center mb-6">
-            <div class="bg-stone-200/80 p-1 rounded-2xl flex space-x-1 shadow-inner">
-                <button id="tab-forge" onclick="switchTab('forge')" class="px-5 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-stone-800 shadow-sm">
-                    ✨ 鍛造信念結晶
-                </button>
-                <button id="tab-vault" onclick="switchTab('vault')" class="px-5 py-2 rounded-xl text-sm font-semibold transition-all text-stone-600 hover:text-stone-900">
-                    🏛️ 世紀封存陳列館
-                </button>
-            </div>
-        </div>
-
-        <!-- 分頁 1：鍛造信念 -->
-        <section id="page-forge" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <!-- 3D 預覽面板 -->
-            <div class="lg:col-span-6 glass-panel rounded-3xl p-6 shadow-xl flex flex-col items-center justify-center relative min-h-[380px]">
-                <div class="absolute top-4 left-4 flex items-center space-x-2 text-xs text-stone-500 bg-white/60 px-3 py-1 rounded-full border border-stone-200">
-                    <i data-lucide="move-3d" class="w-4 h-4 text-emerald-600"></i>
-                    <span>按住滑鼠或手指可 360° 旋轉檢視</span>
-                </div>
-                
-                <!-- Three.js Canvas 容器 -->
-                <div id="canvas-container" class="w-full h-72 sm:h-80 relative flex justify-center items-center cursor-grab active:cursor-grabbing"></div>
-
-                <div class="w-full mt-4 flex justify-between items-center text-xs text-stone-500 border-t border-stone-200/60 pt-3">
-                    <span>切面形狀：<strong id="shapeLabel" class="text-stone-700">二十面正體</strong></span>
-                    <span>結晶光澤：<strong id="colorLabel" class="text-stone-700">翡翠碧綠</strong></span>
-                </div>
-            </div>
-
-            <!-- 表單區塊 -->
-            <div class="lg:col-span-6 glass-panel rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-100">
-                <h2 class="font-serif-tc font-bold text-xl text-stone-800 mb-4 flex items-center gap-2">
-                    <i data-lucide="pen-tool" class="w-5 h-5 text-emerald-700"></i>
-                    鐫刻你的世紀宣言
-                </h2>
-
-                <form id="convictionForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-stone-600 mb-1">立約人姓名 / 綽號</label>
-                        <input type="text" id="authorInput" required placeholder="請輸入你的名字..." class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white/80 text-sm">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-stone-600 mb-1">給 2126 年的我___宣言</label>
-                        <textarea id="contentInput" required rows="4" placeholder="跨越百年的時空，你想對未來的自己說些什麼？" class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white/80 text-sm resize-none"></textarea>
-                    </div>
-
-                    <!-- 結晶樣式設定 -->
-                    <div class="grid grid-cols-2 gap-4 pt-2">
-                        <div>
-                            <label class="block text-xs font-bold text-stone-600 mb-1">結晶色彩</label>
-                            <select id="colorSelect" onchange="updateCrystalStyle()" class="w-full px-3 py-2 rounded-xl border border-stone-300 text-sm bg-white focus:outline-none">
-                                <option value="#10b981">翡翠碧綠</option>
-                                <option value="#3b82f6">藍寶穹蒼</option>
-                                <option value="#8b5cf6">紫晶凝光</option>
-                                <option value="#f59e0b">琥珀金耀</option>
-                                <option value="#ec4899">玫瑰粉晶</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-stone-600 mb-1">幾何結構</label>
-                            <select id="shapeSelect" onchange="updateCrystalStyle()" class="w-full px-3 py-2 rounded-xl border border-stone-300 text-sm bg-white focus:outline-none">
-                                <option value="icosahedron">二十面正體 (Icosahedron)</option>
-                                <option value="octahedron">八面結晶 (Octahedron)</option>
-                                <option value="dodecahedron">十二面靈光 (Dodecahedron)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="w-full mt-4 py-3 bg-emerald-800 hover:bg-emerald-900 text-amber-50 font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2">
-                        <i data-lucide="sparkles" class="w-5 h-5"></i>
-                        封存信念並鍛造結晶
-                    </button>
-                </form>
-            </div>
-        </section>
-
-        <!-- 分頁 2：陳列館 -->
-        <section id="page-vault" class="hidden">
-            <div class="mb-6 flex justify-between items-center">
-                <h2 class="font-serif-tc font-bold text-xl text-stone-800 flex items-center gap-2">
-                    <i data-lucide="archive" class="w-5 h-5 text-emerald-700"></i>
-                    已封存的世代結晶
-                </h2>
-                <span id="crystalCount" class="text-xs bg-stone-200 text-stone-700 px-3 py-1 rounded-full font-medium">共 0 個結晶</span>
-            </div>
-
-            <!-- 結晶展示 Grid -->
-            <div id="crystalGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- 動態載入結晶卡片 -->
-            </div>
-        </section>
-    </main>
-
-    <!-- Modal：檢視詳細結晶 -->
-    <div id="detailModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 hidden flex justify-center items-center p-4">
-        <div class="glass-panel bg-white/95 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative border border-white">
-            <button onclick="closeModal()" class="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-1">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
-
-            <div class="text-center">
-                <div id="modalCanvasContainer" class="w-full h-48 relative flex justify-center items-center my-2 cursor-grab"></div>
-                <h3 id="modalAuthor" class="font-serif-tc font-bold text-lg text-stone-800 mt-2">--</h3>
-                <p id="modalDate" class="text-xs text-stone-400 mb-4">--</p>
-                <div class="bg-stone-50 p-4 rounded-2xl border border-stone-200/60 text-left">
-                    <p id="modalContent" class="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap">--</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal：金鑰設定 -->
-    <div id="configModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 hidden flex justify-center items-center p-4">
-        <div class="glass-panel bg-white/95 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
-            <button onclick="closeConfigModal()" class="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-1">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
-
-            <h3 class="font-serif-tc font-bold text-lg text-stone-800 mb-2 flex items-center gap-2">
-                <i data-lucide="database" class="w-5 h-5 text-emerald-700"></i>
-                網頁連線金鑰 (Firebase Config)
-            </h3>
-            <p class="text-xs text-stone-500 mb-4">系統已預設為您的雲端資料庫。若有變更可貼上 JSON 或 JS 物件：</p>
-
-            <textarea id="configInput" rows="7" class="w-full p-3 font-mono text-xs border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-stone-50" placeholder="{ apiKey: '...', authDomain: '...' }"></textarea>
-
-            <div class="mt-4 flex space-x-2">
-                <button onclick="saveFirebaseConfig()" class="flex-1 py-2.5 bg-emerald-800 text-white rounded-xl text-sm font-bold hover:bg-emerald-900 transition-all">
-                    🔌 連線至 Firebase 雲端資料庫
-                </button>
-                <button onclick="resetFirebaseConfig()" class="px-4 py-2.5 bg-stone-200 text-stone-700 rounded-xl text-sm font-medium hover:bg-stone-300">
-                    重設
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <footer class="text-center py-4 text-xs text-stone-400">
-        &copy; 2026 信念結晶封存匣 &middot; 跨越百年的時空膠囊
-    </footer>
-
-    <!-- Three.js 核心與邏輯控制 Script -->
-    <script>
-        // 預設 Firebase Config
-        const DEFAULT_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyCVX958pKML4Hq_8VkkNK0NOq9RgH8Df2A",
-            authDomain: "crystallized-conviction.firebaseapp.com",
-            projectId: "crystallized-conviction",
-            storageBucket: "crystallized-conviction.firebasestorage.app",
-            messagingSenderId: "254278795435",
-            appId: "1:254278795435:web:e8bfa24981dcfd635a77ee",
-            measurementId: "G-HW4CYGMJRZ"
-        };
-
-        let db = null;
-        let mainScene, mainCamera, mainRenderer, mainMesh;
-        let modalScene, modalCamera, modalRenderer, modalMesh;
-        let localCrystals = [];
-
-        // 初始化 Three.js 3D 視圖
-        function initThreeJS() {
-            const container = document.getElementById('canvas-container');
-            if (!container) return;
-
-            const width = container.clientWidth || 300;
-            const height = container.clientHeight || 300;
-
-            // 主畫布
-            mainScene = new THREE.Scene();
-            mainCamera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-            mainCamera.position.z = 4;
-
-            mainRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-            mainRenderer.setSize(width, height);
-            mainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            container.appendChild(mainRenderer.domElement);
-
-            // 光源
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-            mainScene.add(ambientLight);
-
-            const pointLight = new THREE.PointLight(0xffffff, 1.2);
-            pointLight.position.set(5, 5, 5);
-            mainScene.add(pointLight);
-
-            // 建立預設水晶 Mesh
-            createCrystalMesh(mainScene, '#10b981', 'icosahedron', (mesh) => { mainMesh = mesh; });
-
-            // 啟用互動旋轉
-            enableRotationControl(container, () => mainMesh);
-
-            // Modal 畫布
-            const modalContainer = document.getElementById('modalCanvasContainer');
-            modalScene = new THREE.Scene();
-            modalCamera = new THREE.PerspectiveCamera(45, (modalContainer.clientWidth || 300) / 200, 0.1, 1000);
-            modalCamera.position.z = 4;
-
-            modalRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-            modalRenderer.setSize(modalContainer.clientWidth || 300, 200);
-            modalRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            modalContainer.appendChild(modalRenderer.domElement);
-
-            const modalLight1 = new THREE.AmbientLight(0xffffff, 0.8);
-            const modalLight2 = new THREE.PointLight(0xffffff, 1.2);
-            modalLight2.position.set(5, 5, 5);
-            modalScene.add(modalLight1);
-            modalScene.add(modalLight2);
-
-            enableRotationControl(modalContainer, () => modalMesh);
-
-            // 動畫迴圈
-            function animate() {
-                requestAnimationFrame(animate);
-                if (mainMesh && !mainMesh.isDragging) {
-                    mainMesh.rotation.x += 0.005;
-                    mainMesh.rotation.y += 0.008;
-                }
-                if (modalMesh && !modalMesh.isDragging) {
-                    modalMesh.rotation.x += 0.005;
-                    modalMesh.rotation.y += 0.008;
-                }
-                mainRenderer.render(mainScene, mainCamera);
-                modalRenderer.render(modalScene, modalCamera);
-            }
-            animate();
-        }
-
-        // 產生結晶幾何體
-        function createCrystalMesh(scene, colorHex, shapeType, callback) {
-            let geometry;
-            if (shapeType === 'octahedron') {
-                geometry = new THREE.OctahedronGeometry(1.2, 0);
-            } else if (shapeType === 'dodecahedron') {
-                geometry = new THREE.DodecahedronGeometry(1.1, 0);
-            } else {
-                geometry = new THREE.IcosahedronGeometry(1.2, 0);
-            }
-
-            const material = new THREE.MeshPhongMaterial({
-                color: colorHex,
-                shininess: 90,
-                transparent: true,
-                opacity: 0.88,
-                flatShading: true
-            });
-
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.isDragging = false;
-
-            // 移除舊 Mesh
-            scene.children.forEach(child => {
-                if (child.isMesh) scene.remove(child);
-            });
-
-            scene.add(mesh);
-            if (callback) callback(mesh);
-        }
-
-        // 支援滑鼠與觸控 360° 旋轉
-        function enableRotationControl(element, getMeshFunc) {
-            let isPointerDown = false;
-            let previousPointerPosition = { x: 0, y: 0 };
-
-            function onPointerDown(e) {
-                isPointerDown = true;
-                const mesh = getMeshFunc();
-                if (mesh) mesh.isDragging = true;
-                previousPointerPosition = { x: e.clientX || e.touches[0].clientX, y: e.clientY || e.touches[0].clientY };
-            }
-
-            function onPointerMove(e) {
-                if (!isPointerDown) return;
-                const currentX = e.clientX || (e.touches && e.touches[0].clientX);
-                const currentY = e.clientY || (e.touches && e.touches[0].clientY);
-                const deltaX = currentX - previousPointerPosition.x;
-                const deltaY = currentY - previousPointerPosition.y;
-
-                const mesh = getMeshFunc();
-                if (mesh) {
-                    mesh.rotation.y += deltaX * 0.01;
-                    mesh.rotation.x += deltaY * 0.01;
-                }
-
-                previousPointerPosition = { x: currentX, y: currentY };
-            }
-
-            function onPointerUp() {
-                isPointerDown = false;
-                const mesh = getMeshFunc();
-                if (mesh) mesh.isDragging = false;
-            }
-
-            element.addEventListener('mousedown', onPointerDown);
-            element.addEventListener('mousemove', onPointerMove);
-            window.addEventListener('mouseup', onPointerUp);
-
-            element.addEventListener('touchstart', onPointerDown, { passive: true });
-            element.addEventListener('touchmove', onPointerMove, { passive: true });
-            window.addEventListener('touchend', onPointerUp);
-        }
-
-        // 更新 3D 結晶樣式
-        function updateCrystalStyle() {
-            const color = document.getElementById('colorSelect').value;
-            const shape = document.getElementById('shapeSelect').value;
-            createCrystalMesh(mainScene, color, shape, (mesh) => { mainMesh = mesh; });
-        }
-
-        // 頁籤切換
-        function switchTab(tab) {
-            const forgePage = document.getElementById('page-forge');
-            const vaultPage = document.getElementById('page-vault');
-            const tabForge = document.getElementById('tab-forge');
-            const tabVault = document.getElementById('tab-vault');
-
-            if (tab === 'forge') {
-                forgePage.classList.remove('hidden');
-                vaultPage.classList.add('hidden');
-                tabForge.className = "px-5 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-stone-800 shadow-sm";
-                tabVault.className = "px-5 py-2 rounded-xl text-sm font-semibold transition-all text-stone-600 hover:text-stone-900";
-                
-                // 自動 Resize 防畫布變形
-                setTimeout(() => {
-                    const container = document.getElementById('canvas-container');
-                    if (container && mainRenderer && mainCamera) {
-                        const w = container.clientWidth;
-                        const h = container.clientHeight;
-                        mainCamera.aspect = w / h;
-                        mainCamera.updateProjectionMatrix();
-                        mainRenderer.setSize(w, h);
-                    }
-                }, 50);
-            } else {
-                forgePage.classList.add('hidden');
-                vaultPage.classList.remove('hidden');
-                tabVault.className = "px-5 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-stone-800 shadow-sm";
-                tabForge.className = "px-5 py-2 rounded-xl text-sm font-semibold transition-all text-stone-600 hover:text-stone-900";
-            }
-        }
-
-        // 表單提交
-        async function handleFormSubmit(e) {
-            e.preventDefault();
-            const author = document.getElementById('authorInput').value.trim();
-            const content = document.getElementById('contentInput').value.trim();
-            const color = document.getElementById('colorSelect').value;
-            const shape = document.getElementById('shapeSelect').value;
-
-            const crystalData = {
-                author,
-                content,
-                color,
-                shape,
-                createdAt: new Date().toISOString()
-            };
-
-            if (db) {
-                try {
-                    const { collection, addDoc } = window.FirebaseSDK;
-                    await addDoc(collection(db, "convictions"), crystalData);
-                    alert("✨ 成功封存你的信念結晶至雲端！");
-                } catch (err) {
-                    console.error("寫入 Firebase 失敗，轉儲存至本地", err);
-                    saveLocalCrystal(crystalData);
-                }
-            } else {
-                saveLocalCrystal(crystalData);
-                alert("✨ 已將信念結晶封存於本地 (單機模式)！");
-            }
-
-            document.getElementById('convictionForm').reset();
-            updateCrystalStyle();
-            switchTab('vault');
-        }
-
-        function saveLocalCrystal(data) {
-            localCrystals.unshift(data);
-            localStorage.setItem('localCrystals', JSON.stringify(localCrystals));
-            renderCrystals(localCrystals);
-        }
-
-        // 渲染陳列館
-        function renderCrystals(list) {
-            const grid = document.getElementById('crystalGrid');
-            const countLabel = document.getElementById('crystalCount');
-            grid.innerHTML = '';
-            countLabel.textContent = `共 ${list.length} 個結晶`;
-
-            list.forEach((item, index) => {
-                const dateStr = new Date(item.createdAt).toLocaleDateString('zh-TW');
-                const card = document.createElement('div');
-                card.className = "glass-panel rounded-2xl p-5 shadow-md hover:shadow-lg transition-all cursor-pointer border border-stone-200/80 flex flex-col justify-between";
-                card.onclick = () => openModal(item);
-
-                card.innerHTML = `
-                    <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <span class="w-3 h-3 rounded-full" style="background-color: ${item.color}"></span>
-                            <span class="text-xs text-stone-400">${dateStr}</span>
-                        </div>
-                        <p class="text-stone-800 text-sm font-medium line-clamp-3 mb-4">"${item.content}"</p>
-                    </div>
-                    <div class="flex items-center justify-between text-xs text-stone-500 border-t border-stone-100 pt-2">
-                        <span>立約人：<strong>${item.author}</strong></span>
-                        <span class="text-emerald-700 hover:underline">檢視結晶 ➔</span>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        // Modal 檢視彈窗
-        function openModal(item) {
-            document.getElementById('modalAuthor').textContent = item.author;
-            document.getElementById('modalDate').textContent = new Date(item.createdAt).toLocaleString('zh-TW');
-            document.getElementById('modalContent').textContent = item.content;
-
-            createCrystalMesh(modalScene, item.color, item.shape, (mesh) => { modalMesh = mesh; });
-
-            const modal = document.getElementById('detailModal');
-            modal.classList.remove('hidden');
-
-            setTimeout(() => {
-                const modalContainer = document.getElementById('modalCanvasContainer');
-                if (modalContainer && modalRenderer && modalCamera) {
-                    const w = modalContainer.clientWidth;
-                    modalCamera.aspect = w / 200;
-                    modalCamera.updateProjectionMatrix();
-                    modalRenderer.setSize(w, 200);
-                }
-            }, 50);
-        }
-
-        function closeModal() {
-            document.getElementById('detailModal').classList.add('hidden');
-        }
-
-        // Firebase 初始化與連結
-        function initFirebase(config) {
-            try {
-                const { initializeApp, getFirestore, collection, onSnapshot, query, orderBy } = window.FirebaseSDK;
-                const app = initializeApp(config);
-                db = getFirestore(app);
-
-                const q = query(collection(db, "convictions"), orderBy("createdAt", "desc"));
-                onSnapshot(q, (snapshot) => {
-                    const docs = [];
-                    snapshot.forEach(doc => docs.push(doc.data()));
-                    renderCrystals(docs);
-                });
-
-                document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
-                document.getElementById('statusText').textContent = "🟢 雲端同步中";
-            } catch (e) {
-                console.warn("Firebase 自動連線失敗，使用單機模式", e);
-                document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-amber-500";
-                document.getElementById('statusText').textContent = "🟡 單機模式";
-                loadLocalData();
-            }
-        }
-
-        function loadLocalData() {
-            const saved = localStorage.getItem('localCrystals');
-            if (saved) localCrystals = JSON.parse(saved);
-            renderCrystals(localCrystals);
-        }
-
-        // 金鑰設定彈窗 logic
-        function openConfigModal() {
-            document.getElementById('configInput').value = JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
-            document.getElementById('configModal').classList.remove('hidden');
-        }
-
-        function closeConfigModal() {
-            document.getElementById('configModal').classList.add('hidden');
-        }
-
-        function saveFirebaseConfig() {
-            const raw = document.getElementById('configInput').value.trim();
-            try {
-                let parsedConfig;
-                if (raw.startsWith('{')) {
-                    parsedConfig = JSON.parse(raw);
-                } else {
-                    const clean = raw.replace(/const\s+\w+\s*=\s*/, '').replace(/;/g, '');
-                    parsedConfig = new Function(`return ${clean}`)();
-                }
-                initFirebase(parsedConfig);
-                closeConfigModal();
-                alert("連線設定已儲存並生效！");
-            } catch (e) {
-                alert("解析 Config 格式失敗，請檢查輸入內容是否完整。");
-            }
-        }
-
-        function resetFirebaseConfig() {
-            initFirebase(DEFAULT_FIREBASE_CONFIG);
-            closeConfigModal();
-        }
-
-        // 頁面載入點
-        window.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
-            initThreeJS();
-
-            // 載入本地結晶
-            loadLocalData();
-
-            // 等待 SDK 載入完成後初始化 Firebase
-            setTimeout(() => {
-                if (window.FirebaseSDK) {
-                    initFirebase(DEFAULT_FIREBASE_CONFIG);
-                }
-            }, 300);
-        });
-    </script>
-</body>
-</html>
+<!DOCTYPE html><html lang="zh-TW"><head>    <meta charset="UTF-8">    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <title>《阡陌之森》信念結晶封存匣 - 自然生態版</title>    <!-- Tailwind CSS -->    <script src="https://cdn.tailwindcss.com"></script>    <!-- Lucide Icons -->    <script src="https://unpkg.com/lucide@latest"></script>    <!-- Three.js (3D 渲染引擎) -->    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>    <!-- Google Fonts: 溫潤手繪感字型 -->    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">    <!-- Firebase JS SDK (v10 模組化 CDN) -->    <script type="module">        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";                window.FirebaseSDK = {            initializeApp,            getFirestore,            collection,            addDoc,            onSnapshot,            query,            orderBy        };    </script>    <style>        :root {            --bg-rice-paper: #f9f6ed;            --kraft-paper: #f0eae1;            --moss-green: #606c38;            --forest-green: #283618;            --golden-yellow: #dda15e;            --mint-blue: #a3b18a;            --taupe-brown: #bc6c25;            --text-dark: #3a3226;        }        body {            font-family: 'Zen Maru Gothic', sans-serif;            background-color: var(--bg-rice-paper);            background-image: radial-gradient(rgba(188, 108, 37, 0.04) 1px, transparent 0);            background-size: 24px 24px;            color: var(--text-dark);        }        .font-serif-tc {            font-family: 'Noto Serif TC', serif;        }        .nature-card {            background: rgba(255, 253, 247, 0.9);            backdrop-filter: blur(8px);            border: 1px solid rgba(163, 177, 138, 0.3);            box-shadow: 0 10px 30px -5px rgba(96, 108, 56, 0.08);        }        .btn-forest {            background-color: var(--forest-green);            color: #fefae0;            transition: all 0.2s ease;        }        .btn-forest:hover {            background-color: var(--moss-green);        }        canvas {            touch-action: none;        }    </style></head><body class="min-h-screen flex flex-col justify-between selection:bg-amber-200">    <!-- 頂部導覽列：《阡陌之森》主題風格 -->    <header class="sticky top-0 z-40 nature-card border-b border-stone-300/50 px-4 py-3.5 sm:px-8">        <div class="max-w-6xl mx-auto flex justify-between items-center">            <div class="flex items-center space-x-3">                <div class="p-2 bg-[#606c38] text-[#fefae0] rounded-2xl shadow-sm">                    <i data-lucide="trees" class="w-6 h-6"></i>                </div>                <div>                    <h1 class="font-serif-tc font-bold text-lg sm:text-xl tracking-wide text-[#283618]">阡陌之森・信念結晶封存匣</h1>                    <p class="text-xs text-[#bc6c25]">給 2126 年的我___生態時空宣言</p>                </div>            </div>            <!-- 雲端同步狀態按鈕 -->            <div class="flex items-center space-x-2">                <button id="cloudStatusBtn" onclick="openConfigModal()" class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all bg-[#a3b18a]/20 text-[#283618] border border-[#a3b18a]/40 hover:bg-[#a3b18a]/30">                    <span id="statusDot" class="w-2 h-2 rounded-full bg-[#606c38] animate-pulse"></span>                    <span id="statusText">🟢 森林雲端同步中</span>                </button>            </div>        </div>    </header>    <!-- 主要內容區 -->    <main class="max-w-6xl mx-auto px-4 py-8 w-full flex-grow">        <!-- 分頁切換器 -->        <div class="flex justify-center mb-8">            <div class="bg-[#e9e3d5] p-1 rounded-2xl flex space-x-1 shadow-inner border border-stone-300/40">                <button id="tab-forge" onclick="switchTab('forge')" class="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all bg-white text-[#283618] shadow-sm">                    🌱 鍛造自然生態結晶                </button>                <button id="tab-vault" onclick="switchTab('vault')" class="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all text-[#606c38] hover:text-[#283618]">                    🪵 百年生態陳列館                </button>            </div>        </div>        <!-- 分頁 1：鍛造信念 -->        <section id="page-forge" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">            <!-- 3D 預覽面板 -->            <div class="lg:col-span-6 nature-card rounded-3xl p-6 shadow-xl flex flex-col items-center justify-center relative min-h-[400px]">                <div class="absolute top-4 left-4 flex items-center space-x-2 text-xs text-[#606c38] bg-[#fefae0]/80 px-3 py-1 rounded-full border border-[#a3b18a]/40">                    <i data-lucide="move-3d" class="w-4 h-4 text-[#bc6c25]"></i>                    <span>按住滑鼠或拖曳可 360° 旋轉結晶</span>                </div>                                <!-- Three.js Canvas 容器 -->                <div id="canvas-container" class="w-full h-80 relative flex justify-center items-center cursor-grab active:cursor-grabbing mt-2"></div>                <div class="w-full mt-4 flex justify-between items-center text-xs text-[#606c38] border-t border-stone-300/40 pt-3">                    <span>生態切面：<strong id="shapeLabel" class="text-[#283618]">二十面正體 (翠森)</strong></span>                    <span>自然光澤：<strong id="colorLabel" class="text-[#283618]">苔蘚綠</strong></span>                </div>            </div>            <!-- 表單區塊 -->            <div class="lg:col-span-6 nature-card rounded-3xl p-6 sm:p-8 shadow-xl">                <h2 class="font-serif-tc font-bold text-xl text-[#283618] mb-4 flex items-center gap-2">                    <i data-lucide="feather" class="w-5 h-5 text-[#bc6c25]"></i>                    鐫刻你的世紀生態宣言                </h2>                <form id="convictionForm" onsubmit="handleFormSubmit(event)" class="space-y-4">                    <div>                        <label class="block text-xs font-bold text-[#606c38] mb-1">立約人姓名 / 森林代號</label>                        <input type="text" id="authorInput" required placeholder="請輸入你的名字或生態代號..." class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-[#606c38] focus:outline-none bg-white/90 text-sm">                    </div>                    <div>                        <label class="block text-xs font-bold text-[#606c38] mb-1">給 2126 年的我___宣言</label>                        <textarea id="contentInput" required rows="4" placeholder="跨越百年的時空，你想對未來的自己或大地留下什麼樣的寄語？" class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-[#606c38] focus:outline-none bg-white/90 text-sm resize-none"></textarea>                    </div>                    <!-- 結晶樣式設定 -->                    <div class="grid grid-cols-2 gap-4 pt-1">                        <div>                            <label class="block text-xs font-bold text-[#606c38] mb-1">生態主色調</label>                            <select id="colorSelect" onchange="updateCrystalStyle()" class="w-full px-3 py-2 rounded-xl border border-stone-300 text-sm bg-white/90 focus:outline-none text-[#283618]">                                <option value="#606c38">苔蘚綠 (Moss Green)</option>                                <option value="#283618">森林綠 (Forest Green)</option>                                <option value="#a3b18a">薄荷藍 (Mint Blue)</option>                                <option value="#dda15e">稻香金 (Golden Yellow)</option>                                <option value="#bc6c25">赭土棕 (Taupe Brown)</option>                            </select>                        </div>                        <div>                            <label class="block text-xs font-bold text-[#606c38] mb-1">幾何結構</label>                            <select id="shapeSelect" onchange="updateCrystalStyle()" class="w-full px-3 py-2 rounded-xl border border-stone-300 text-sm bg-white/90 focus:outline-none text-[#283618]">                                <option value="icosahedron">二十面正體 (Icosahedron)</option>                                <option value="octahedron">八面結晶 (Octahedron)</option>                                <option value="dodecahedron">十二面靈光 (Dodecahedron)</option>                            </select>                        </div>                    </div>                    <button type="submit" class="w-full mt-4 py-3 btn-forest font-bold rounded-xl shadow-lg flex justify-center items-center gap-2">                        <i data-lucide="sprout" class="w-5 h-5 text-[#dda15e]"></i>                        封存生態信念並鍛造結晶                    </button>                </form>            </div>        </section>        <!-- 分頁 2：陳列館 -->        <section id="page-vault" class="hidden">            <div class="mb-6 flex justify-between items-center">                <h2 class="font-serif-tc font-bold text-xl text-[#283618] flex items-center gap-2">                    <i data-lucide="book-open" class="w-5 h-5 text-[#bc6c25]"></i>                    已封存的世代生態結晶                </h2>                <span id="crystalCount" class="text-xs bg-[#e9e3d5] text-[#606c38] px-3.5 py-1 rounded-full font-semibold border border-stone-300/40">共 0 個結晶</span>            </div>            <!-- 結晶展示 Grid -->            <div id="crystalGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">                <!-- 動態載入結晶卡片 -->            </div>        </section>    </main>    <!-- Modal：檢視詳細結晶 -->    <div id="detailModal" class="fixed inset-0 bg-[#283618]/50 backdrop-blur-sm z-50 hidden flex justify-center items-center p-4">        <div class="nature-card bg-[#fffdf7] rounded-3xl max-w-lg w-full p-6 shadow-2xl relative border border-[#a3b18a]">            <button onclick="closeModal()" class="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-1">                <i data-lucide="x" class="w-6 h-6"></i>            </button>            <div class="text-center">                <div id="modalCanvasContainer" class="w-full h-48 relative flex justify-center items-center my-2 cursor-grab"></div>                <h3 id="modalAuthor" class="font-serif-tc font-bold text-lg text-[#283618] mt-2">--</h3>                <p id="modalDate" class="text-xs text-[#bc6c25] mb-4">--</p>                <div class="bg-[#f9f6ed] p-4 rounded-2xl border border-stone-200 text-left">                    <p id="modalContent" class="text-[#3a3226] text-sm leading-relaxed whitespace-pre-wrap">--</p>                </div>            </div>        </div>    </div>    <!-- Modal：金鑰設定 -->    <div id="configModal" class="fixed inset-0 bg-[#283618]/50 backdrop-blur-sm z-50 hidden flex justify-center items-center p-4">        <div class="nature-card bg-[#fffdf7] rounded-3xl max-w-md w-full p-6 shadow-2xl relative">            <button onclick="closeConfigModal()" class="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-1">                <i data-lucide="x" class="w-6 h-6"></i>            </button>            <h3 class="font-serif-tc font-bold text-lg text-[#283618] mb-2 flex items-center gap-2">                <i data-lucide="database" class="w-5 h-5 text-[#bc6c25]"></i>                網頁連線金鑰 (Firebase Config)            </h3>            <p class="text-xs text-[#606c38] mb-4">系統已預設連結至雲端資料庫。若有變更可在此貼上 JSON：</p>            <textarea id="configInput" rows="7" class="w-full p-3 font-mono text-xs border border-stone-300 rounded-xl focus:ring-2 focus:ring-[#606c38] focus:outline-none bg-[#f9f6ed]" placeholder="{ apiKey: '...', authDomain: '...' }"></textarea>            <div class="mt-4 flex space-x-2">                <button onclick="saveFirebaseConfig()" class="flex-1 py-2.5 btn-forest rounded-xl text-sm font-bold shadow-md">                    🔌 連線至 Firebase 雲端資料庫                </button>                <button onclick="resetFirebaseConfig()" class="px-4 py-2.5 bg-[#e9e3d5] text-[#283618] rounded-xl text-sm font-medium hover:bg-stone-300">                    重設                </button>            </div>        </div>    </div>    <footer class="text-center py-6 text-xs text-[#606c38] border-t border-stone-300/40 bg-[#f0eae1]/50">        &copy; 2026 《阡陌之森》信念結晶封存匣 &middot; 自然生態手繪時空膠囊    </footer>    <!-- Three.js 核心與邏輯控制 Script -->    <script>        const DEFAULT_FIREBASE_CONFIG = {            apiKey: "AIzaSyCVX958pKML4Hq_8VkkNK0NOq9RgH8Df2A",            authDomain: "crystallized-conviction.firebaseapp.com",            projectId: "crystallized-conviction",            storageBucket: "crystallized-conviction.firebasestorage.app",            messagingSenderId: "254278795435",            appId: "1:254278795435:web:e8bfa24981dcfd635a77ee",            measurementId: "G-HW4CYGMJRZ"        };        let db = null;        let mainScene, mainCamera, mainRenderer, mainMesh;        let modalScene, modalCamera, modalRenderer, modalMesh;        let localCrystals = [];        function initThreeJS() {            const container = document.getElementById('canvas-container');            if (!container) return;            const width = container.clientWidth || 300;            const height = container.clientHeight || 320;            mainScene = new THREE.Scene();            mainCamera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);            mainCamera.position.z = 4;            mainRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });            mainRenderer.setSize(width, height);            mainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));            container.appendChild(mainRenderer.domElement);            const ambientLight = new THREE.AmbientLight(0xfffef0, 0.8);            mainScene.add(ambientLight);            const pointLight = new THREE.PointLight(0xfffae6, 1.4);            pointLight.position.set(5, 5, 5);            mainScene.add(pointLight);            createCrystalMesh(mainScene, '#606c38', 'icosahedron', (mesh) => { mainMesh = mesh; });            enableRotationControl(container, () => mainMesh);            const modalContainer = document.getElementById('modalCanvasContainer');            modalScene = new THREE.Scene();            modalCamera = new THREE.PerspectiveCamera(45, (modalContainer.clientWidth || 300) / 200, 0.1, 1000);            modalCamera.position.z = 4;            modalRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });            modalRenderer.setSize(modalContainer.clientWidth || 300, 200);            modalRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));            modalContainer.appendChild(modalRenderer.domElement);            const modalLight1 = new THREE.AmbientLight(0xfffef0, 0.8);            const modalLight2 = new THREE.PointLight(0xfffae6, 1.4);            modalLight2.position.set(5, 5, 5);            modalScene.add(modalLight1);            modalScene.add(modalLight2);            enableRotationControl(modalContainer, () => modalMesh);            function animate() {                requestAnimationFrame(animate);                if (mainMesh && !mainMesh.isDragging) {                    mainMesh.rotation.x += 0.004;                    mainMesh.rotation.y += 0.007;                }                if (modalMesh && !modalMesh.isDragging) {                    modalMesh.rotation.x += 0.004;                    modalMesh.rotation.y += 0.007;                }                mainRenderer.render(mainScene, mainCamera);                modalRenderer.render(modalScene, modalCamera);            }            animate();        }        function createCrystalMesh(scene, colorHex, shapeType, callback) {            let geometry;            if (shapeType === 'octahedron') {                geometry = new THREE.OctahedronGeometry(1.2, 0);            } else if (shapeType === 'dodecahedron') {                geometry = new THREE.DodecahedronGeometry(1.1, 0);            } else {                geometry = new THREE.IcosahedronGeometry(1.2, 0);            }            const material = new THREE.MeshPhongMaterial({                color: colorHex,                shininess: 85,                transparent: true,                opacity: 0.9,                flatShading: true            });            const mesh = new THREE.Mesh(geometry, material);            mesh.isDragging = false;            scene.children.forEach(child => {                if (child.isMesh) scene.remove(child);            });            scene.add(mesh);            if (callback) callback(mesh);        }        function enableRotationControl(element, getMeshFunc) {            let isPointerDown = false;            let previousPointerPosition = { x: 0, y: 0 };            function onPointerDown(e) {                isPointerDown = true;                const mesh = getMeshFunc();                if (mesh) mesh.isDragging = true;                previousPointerPosition = { x: e.clientX || e.touches[0].clientX, y: e.clientY || e.touches[0].clientY };            }            function onPointerMove(e) {                if (!isPointerDown) return;                const currentX = e.clientX || (e.touches && e.touches[0].clientX);                const currentY = e.clientY || (e.touches && e.touches[0].clientY);                const deltaX = currentX - previousPointerPosition.x;                const deltaY = currentY - previousPointerPosition.y;                const mesh = getMeshFunc();                if (mesh) {                    mesh.rotation.y += deltaX * 0.01;                    mesh.rotation.x += deltaY * 0.01;                }                previousPointerPosition = { x: currentX, y: currentY };            }            function onPointerUp() {                isPointerDown = false;                const mesh = getMeshFunc();                if (mesh) mesh.isDragging = false;            }            element.addEventListener('mousedown', onPointerDown);            element.addEventListener('mousemove', onPointerMove);            window.addEventListener('mouseup', onPointerUp);            element.addEventListener('touchstart', onPointerDown, { passive: true });            element.addEventListener('touchmove', onPointerMove, { passive: true });            window.addEventListener('touchend', onPointerUp);        }        function updateCrystalStyle() {            const color = document.getElementById('colorSelect').value;            const shape = document.getElementById('shapeSelect').value;            createCrystalMesh(mainScene, color, shape, (mesh) => { mainMesh = mesh; });        }        function switchTab(tab) {            const forgePage = document.getElementById('page-forge');            const vaultPage = document.getElementById('page-vault');            const tabForge = document.getElementById('tab-forge');            const tabVault = document.getElementById('tab-vault');            if (tab === 'forge') {                forgePage.classList.remove('hidden');                vaultPage.classList.add('hidden');                tabForge.className = "px-6 py-2.5 rounded-xl text-sm font-semibold transition-all bg-white text-[#283618] shadow-sm";                tabVault.className = "px-6 py-2.5 rounded-xl text-sm font-semibold transition-all text-[#606c38] hover:text-[#283618]";                                setTimeout(() => {                    const container = document.getElementById('canvas-container');                    if (container && mainRenderer && mainCamera) {                        const w = container.clientWidth;                        const h = container.clientHeight;                        mainCamera.aspect = w / h;                        mainCamera.updateProjectionMatrix();                        mainRenderer.setSize(w, h);                    }                }, 50);            } else {                forgePage.classList.add('hidden');                vaultPage.classList.remove('hidden');                tabVault.className = "px-6 py-2.5 rounded-xl text-sm font-semibold transition-all bg-white text-[#283618] shadow-sm";                tabForge.className = "px-6 py-2.5 rounded-xl text-sm font-semibold transition-all text-[#606c38] hover:text-[#283618]";            }        }        async function handleFormSubmit(e) {            e.preventDefault();            const author = document.getElementById('authorInput').value.trim();            const content = document.getElementById('contentInput').value.trim();            const color = document.getElementById('colorSelect').value;            const shape = document.getElementById('shapeSelect').value;            const crystalData = {                author,                content,                color,                shape,                createdAt: new Date().toISOString()            };            if (db) {                try {                    const { collection, addDoc } = window.FirebaseSDK;                    await addDoc(collection(db, "convictions"), crystalData);                    alert("🌱 成功將生態信念結晶封存至森林雲端！");                } catch (err) {                    console.error("寫入 Firebase 失敗，轉儲存至本地", err);                    saveLocalCrystal(crystalData);                }            } else {                saveLocalCrystal(crystalData);                alert("🌱 已將結晶封存於本地 (單機模式)！");            }            document.getElementById('convictionForm').reset();            updateCrystalStyle();            switchTab('vault');        }        function saveLocalCrystal(data) {            localCrystals.unshift(data);            localStorage.setItem('localCrystals', JSON.stringify(localCrystals));            renderCrystals(localCrystals);        }        function renderCrystals(list) {            const grid = document.getElementById('crystalGrid');            const countLabel = document.getElementById('crystalCount');            grid.innerHTML = '';            countLabel.textContent = `共 ${list.length} 個生態結晶`;            list.forEach((item) => {                const dateStr = new Date(item.createdAt).toLocaleDateString('zh-TW');                const card = document.createElement('div');                card.className = "nature-card rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between";                card.onclick = () => openModal(item);                card.innerHTML = `                    <div>                        <div class="flex items-center justify-between mb-3">                            <span class="w-3.5 h-3.5 rounded-full border border-white/60 shadow-sm" style="background-color: ${item.color}"></span>                            <span class="text-xs text-[#bc6c25]">${dateStr}</span>                        </div>                        <p class="text-[#3a3226] text-sm font-medium line-clamp-3 mb-4">"${item.content}"</p>                    </div>                    <div class="flex items-center justify-between text-xs text-[#606c38] border-t border-stone-200/60 pt-2.5">                        <span>立約人：<strong>${item.author}</strong></span>                        <span class="text-[#bc6c25] font-medium hover:underline">檢視結晶 ➔</span>                    </div>                `;                grid.appendChild(card);            });        }        function openModal(item) {            document.getElementById('modalAuthor').textContent = item.author;            document.getElementById('modalDate').textContent = new Date(item.createdAt).toLocaleString('zh-TW');            document.getElementById('modalContent').textContent = item.content;            createCrystalMesh(modalScene, item.color, item.shape, (mesh) => { modalMesh = mesh; });            const modal = document.getElementById('detailModal');            modal.classList.remove('hidden');            setTimeout(() => {                const modalContainer = document.getElementById('modalCanvasContainer');                if (modalContainer && modalRenderer && modalCamera) {                    const w = modalContainer.clientWidth;                    modalCamera.aspect = w / 200;                    modalCamera.updateProjectionMatrix();                    modalRenderer.setSize(w, 200);                }            }, 50);        }        function closeModal() {            document.getElementById('detailModal').classList.add('hidden');        }        function initFirebase(config) {            try {                const { initializeApp, getFirestore, collection, onSnapshot, query, orderBy } = window.FirebaseSDK;                const app = initializeApp(config);                db = getFirestore(app);                const q = query(collection(db, "convictions"), orderBy("createdAt", "desc"));                onSnapshot(q, (snapshot) => {                    const docs = [];                    snapshot.forEach(doc => docs.push(doc.data()));                    renderCrystals(docs);                });                document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-[#606c38] animate-pulse";                document.getElementById('statusText').textContent = "🟢 森林雲端同步中";            } catch (e) {                console.warn("Firebase 自動連線失敗，使用單機模式", e);                document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-[#dda15e]";                document.getElementById('statusText').textContent = "🟡 森林單機模式";                loadLocalData();            }        }        function loadLocalData() {            const saved = localStorage.getItem('localCrystals');            if (saved) localCrystals = JSON.parse(saved);            renderCrystals(localCrystals);        }        function openConfigModal() {            document.getElementById('configInput').value = JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);            document.getElementById('configModal').classList.remove('hidden');        }        function closeConfigModal() {            document.getElementById('configModal').classList.add('hidden');        }        function saveFirebaseConfig() {            const raw = document.getElementById('configInput').value.trim();            try {                let parsedConfig;                if (raw.startsWith('{')) {                    parsedConfig = JSON.parse(raw);                } else {                    const clean = raw.replace(/const\s+\w+\s*=\s*/, '').replace(/;/g, '');                    parsedConfig = new Function(`return ${clean}`)();                }                initFirebase(parsedConfig);                closeConfigModal();                alert("雲端連線設定已更新！");            } catch (e) {                alert("解析 Config 格式失敗，請檢查輸入內容是否完整。");            }        }        function resetFirebaseConfig() {            initFirebase(DEFAULT_FIREBASE_CONFIG);            closeConfigModal();        }        window.addEventListener('DOMContentLoaded', () => {            lucide.createIcons();            initThreeJS();            loadLocalData();            setTimeout(() => {                if (window.FirebaseSDK) {                    initFirebase(DEFAULT_FIREBASE_CONFIG);                }            }, 300);        });    </script></body></html>
